@@ -1,6 +1,6 @@
 /* style.css */
 
-/* Reset cơ bản (có thể không cần nếu đã có trong HTML) */
+/* Reset cơ bản */
 * {
     margin: 0;
     padding: 0;
@@ -22,7 +22,7 @@ html, body {
     display: flex;
     justify-content: center;
     align-items: center;
-    font-family: Arial, sans-serif; /* Font chữ mặc định cho trang (nếu có phần tử HTML khác) */
+    font-family: Arial, sans-serif; /* Font chữ mặc định cho trang */
 }
 
 canvas {
@@ -33,21 +33,3 @@ canvas {
     image-rendering: -webkit-optimize-contrast; /* Thử nghiệm để ảnh pixel nét hơn */
     image-rendering: crisp-edges;
 }
-
-/* Có thể thêm các style cho trạng thái loading hoặc thông báo lỗi nếu bạn dùng HTML để hiển thị chúng */
-/* Ví dụ:
-.loading-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background-color: rgba(0, 0, 0, 0.8);
-    color: white;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    font-size: 2em;
-    z-index: 1000;
-}
-*/
