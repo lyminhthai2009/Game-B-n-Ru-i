@@ -8,7 +8,7 @@ let scaleFactor = 1;
 let canvasWidth = BASE_WIDTH;
 let canvasHeight = BASE_HEIGHT;
 
-let gameState = 'loading'; // 'loading', 'mainMenu', 'playing', 'gameOver', 'missionComplete'
+let gameState = 'loading'; // 'loading', 'mainMenu', 'playing', 'gameOver', 'win' // 'win' được thêm vào
 let score = 0;
 let highScore = 0;
 let gameFrame = 0; // General frame counter
@@ -16,11 +16,11 @@ let gameFrame = 0; // General frame counter
 // Game Settings (sẽ lưu vào localStorage nếu cần)
 let gameSettings = {
     difficulty: 'medium', // 'easy', 'medium', 'hard'
-    selectedPlayerSkin: 'default', // Key của skin tàu
-    selectedBulletSkin: 'default', // Key của skin đạn
+    selectedPlayerSkin: 'player_default', // Key của skin tàu
+    selectedBulletSkin: 'bullet_default', // Key của skin đạn
     unlockedSkins: { // Theo dõi những gì đã mở khóa
-        player: ['default'],
-        bullet: ['default']
+        player: ['player_default'], // Đảm bảo default luôn có
+        bullet: ['bullet_default']
     },
     soundEnabled: true // Ví dụ
 };
@@ -49,12 +49,13 @@ const difficultyPresets = {
 
 // --- Asset Loading ---
 const assets = {
+    // Sử dụng tên file bạn cung cấp, liên kết với keys
     player_default: { src: 'assets/player.png', img: new Image() },
-    invader_basic: { src: 'assets/invader.png', img: new Image() },
+    invader_basic: { src: 'assets/invader.png', img: new Image() }, // Key này dùng cho Invader cơ bản
     bullet_default: { src: 'assets/bullet.png', img: new Image() },
-    explosion: { src: 'assets/explosion.png', img: new Image(), frames: 6, frameWidth: 32 }, // Giả sử ảnh nổ là sprite sheet
-    background: { src: 'assets/background.png', img: new Image() } // Ví dụ ảnh nền
-    // Thêm các skin khác vào đây: player_blue, bullet_fire, invader_strong,...
+    explosion: { src: 'assets/explosion.png', img: new Image(), frames: 6, frameWidth: 32 }, // Giả sử ảnh nổ là sprite sheet 6 frame, mỗi frame 32x32
+    background: { src: 'assets/background.png', img: new Image() }
+    // Thêm các skin khác vào đây nếu có (ví dụ: player_blue: { src: 'assets/player_blue.png', img: new Image() },)
 };
 
 let assetsLoadedCount = 0;
@@ -62,32 +63,30 @@ let totalAssets = Object.keys(assets).length;
 
 function loadAssets() {
     console.log("Loading assets...");
+    gameState = 'loading'; // Đặt trạng thái loading
     for (const key in assets) {
         assets[key].img.onload = () => {
             assetsLoadedCount++;
             console.log(`Loaded: ${key} (${assetsLoadedCount}/${totalAssets})`);
             if (assetsLoadedCount === totalAssets) {
                 console.log("All assets loaded!");
-                // Load game settings và high score
                 loadGameSettings();
                 loadHighScore();
-                // Thiết lập kích thước và UI ban đầu
-                resizeCanvas(); // Quan trọng: gọi resize để tính scale và vị trí UI
-                gameState = 'mainMenu'; // Bắt đầu ở menu chính
-                requestAnimationFrame(gameLoop); // Bắt đầu vòng lặp game
+                resizeCanvas(); // Gọi resize sau khi load xong để tính toán ban đầu
+                gameState = 'mainMenu'; // Chuyển sang menu chính
+                // Không gọi gameLoop ở đây, nó sẽ được gọi ở dưới cùng
             }
         };
         assets[key].img.onerror = () => {
             console.error(`Failed to load asset: ${key} at ${assets[key].src}`);
-            // Có thể dừng game hoặc dùng fallback ở đây
-            assetsLoadedCount++; // Vẫn tăng để tránh bị kẹt loading vô hạn
+            // Xử lý lỗi: có thể hiển thị thông báo lỗi trên canvas
+            assetsLoadedCount++; // Vẫn tăng để tránh bị kẹt
              if (assetsLoadedCount === totalAssets) {
-                 // Vẫn tiếp tục nhưng có thể thiếu ảnh
+                  console.warn("Proceeding with missing assets.");
                   loadGameSettings();
                   loadHighScore();
                   resizeCanvas();
                   gameState = 'mainMenu';
-                  requestAnimationFrame(gameLoop);
              }
         };
         assets[key].img.src = assets[key].src;
@@ -109,25 +108,21 @@ function loadGameSettings() {
     if (savedSettings) {
         try {
             const parsed = JSON.parse(savedSettings);
-            // Merge với default settings để đảm bảo có đủ key
-             gameSettings = { ...gameSettings, ...parsed };
-             // Đảm bảo unlockedSkins là object với các mảng
-            if (!gameSettings.unlockedSkins || typeof gameSettings.unlockedSkins !== 'object') {
-                 gameSettings.unlockedSkins = { player: ['default'], bullet: ['default'] };
-            }
-             if (!Array.isArray(gameSettings.unlockedSkins.player)) gameSettings.unlockedSkins.player = ['default'];
-             if (!Array.isArray(gameSettings.unlockedSkins.bullet)) gameSettings.unlockedSkins.bullet = ['default'];
+            gameSettings = { ...gameSettings, ...parsed };
+             // Đảm bảo unlockedSkins có cấu trúc đúng
+             if (!gameSettings.unlockedSkins || typeof gameSettings.unlockedSkins !== 'object') {
+                 gameSettings.unlockedSkins = { player: ['player_default'], bullet: ['bullet_default'] };
+             }
+             gameSettings.unlockedSkins.player = Array.isArray(gameSettings.unlockedSkins.player) ? [...new Set(['player_default', ...gameSettings.unlockedSkins.player])] : ['player_default'];
+             gameSettings.unlockedSkins.bullet = Array.isArray(gameSettings.unlockedSkins.bullet) ? [...new Set(['bullet_default', ...gameSettings.unlockedSkins.bullet])] : ['bullet_default'];
 
-        } catch (e) {
-            console.error("Failed to parse saved settings, using defaults.");
-            // Giữ default settings nếu parse lỗi
-        }
+        } catch (e) { console.error("Failed to parse saved settings.", e); }
     }
-    console.log("Loaded settings:", gameSettings);
+     console.log("Loaded settings:", gameSettings);
 }
 function saveGameSettings() {
     localStorage.setItem('spaceInvadersSettings', JSON.stringify(gameSettings));
-    console.log("Saved settings:", gameSettings);
+     console.log("Saved settings:", gameSettings);
 }
 
 // --- Responsive Canvas & Scaling ---
@@ -136,675 +131,532 @@ function resizeCanvas() {
     const windowHeight = window.innerHeight;
     const windowWidth = window.innerWidth;
 
-    // Ưu tiên chiều cao cho mobile portrait
     canvasHeight = windowHeight;
     canvasWidth = canvasHeight * aspectRatio;
 
-    // Nếu quá rộng so với màn hình, tính lại theo chiều rộng
     if (canvasWidth > windowWidth) {
         canvasWidth = windowWidth;
         canvasHeight = canvasWidth / aspectRatio;
     }
 
-    // Giảm kích thước một chút để không bị tràn viền hoàn toàn
     canvasWidth *= 0.98;
     canvasHeight *= 0.98;
 
     canvas.width = Math.floor(canvasWidth);
     canvas.height = Math.floor(canvasHeight);
+    scaleFactor = canvas.height / BASE_HEIGHT;
 
-    // Tính scale factor
-    scaleFactor = canvas.height / BASE_HEIGHT; // Hoặc canvas.width / BASE_WIDTH
-
-    // Cập nhật thông số game dựa trên độ khó và scale
     loadDifficultyParameters();
-
-    // Thiết lập lại UI Elements cho màn hình hiện tại
-    setupUIForState(gameState); // Quan trọng: UI cần được định vị lại sau resize
+    setupUIForState(gameState); // Cập nhật UI sau khi resize
 }
 
 // --- Difficulty Management ---
 function loadDifficultyParameters() {
     const preset = difficultyPresets[gameSettings.difficulty] || difficultyPresets.medium;
     for (const key in preset) {
-        // Scale các giá trị không gian (tốc độ, khoảng cách)
         if (key.includes('SPEED') || key.includes('DROP')) {
              params[key] = preset[key] * scaleFactor;
         } else {
-            params[key] = preset[key]; // Các giá trị khác (cooldown, probability) giữ nguyên
+            params[key] = preset[key];
         }
     }
-     console.log(`Difficulty: ${gameSettings.difficulty}`, params);
 }
 
-
-// --- UI System (Basic) ---
+// --- UI System ---
 function setupUIForState(state) {
-    uiElements = {}; // Xóa UI cũ
-    const cx = canvas.width / 2; // Center X
-    const cy = canvas.height / 2; // Center Y
+    uiElements = {};
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
 
-    if (state === 'mainMenu') {
-        // Tiêu đề
+    if (state === 'loading') {
+         uiElements.loadingText = { type: 'text', x: cx, y: cy, text: 'Loading Assets...', font: `${30 * scaleFactor}px Arial`, color: '#FFFFFF', align: 'center' };
+    } else if (state === 'mainMenu') {
         uiElements.title = { type: 'text', x: cx, y: canvas.height * 0.15, text: 'SPACE INVADERS', font: `bold ${60 * scaleFactor}px Arial`, color: '#00FFFF', align: 'center' };
-        // High Score
         uiElements.highScore = { type: 'text', x: cx, y: canvas.height * 0.25, text: `High Score: ${highScore}`, font: `${24 * scaleFactor}px Arial`, color: '#FFFF00', align: 'center' };
+        uiElements.playButton = createButton(cx, cy - 50 * scaleFactor, 250 * scaleFactor, 70 * scaleFactor, 'CHƠI', '#4CAF50', () => { initializeGame(); gameState = 'playing'; });
 
-        // Nút Play
-        uiElements.playButton = createButton(cx, cy - 50 * scaleFactor, 250 * scaleFactor, 70 * scaleFactor, 'CHƠI', '#4CAF50', () => {
-            initializeGame();
-            gameState = 'playing';
-        });
-
-        // Nhóm nút Độ khó
         const diffBtnWidth = 150 * scaleFactor;
         const diffBtnHeight = 50 * scaleFactor;
         const diffBtnY = cy + 50 * scaleFactor;
         const diffBtnSpacing = 20 * scaleFactor;
         const totalDiffWidth = diffBtnWidth * 3 + diffBtnSpacing * 2;
-        let startX = cx - totalDiffWidth / 2 + diffBtnWidth / 2; // Căn giữa nút đầu tiên
+        let startX = cx - totalDiffWidth / 2 + diffBtnWidth / 2;
 
-        uiElements.easyBtn = createButton(startX, diffBtnY, diffBtnWidth, diffBtnHeight, 'Dễ', gameSettings.difficulty === 'easy' ? '#FFC107' : '#607D8B', () => { gameSettings.difficulty = 'easy'; saveGameSettings(); setupUIForState('mainMenu'); });
+        uiElements.easyBtn = createButton(startX, diffBtnY, diffBtnWidth, diffBtnHeight, 'Dễ', gameSettings.difficulty === 'easy' ? '#FFC107' : '#607D8B', () => { gameSettings.difficulty = 'easy'; loadDifficultyParameters(); saveGameSettings(); setupUIForState('mainMenu'); });
         startX += diffBtnWidth + diffBtnSpacing;
-        uiElements.mediumBtn = createButton(startX, diffBtnY, diffBtnWidth, diffBtnHeight, 'Thường', gameSettings.difficulty === 'medium' ? '#FFC107' : '#607D8B', () => { gameSettings.difficulty = 'medium'; saveGameSettings(); setupUIForState('mainMenu'); });
+        uiElements.mediumBtn = createButton(startX, diffBtnY, diffBtnWidth, diffBtnHeight, 'Thường', gameSettings.difficulty === 'medium' ? '#FFC107' : '#607D8B', () => { gameSettings.difficulty = 'medium'; loadDifficultyParameters(); saveGameSettings(); setupUIForState('mainMenu'); });
         startX += diffBtnWidth + diffBtnSpacing;
-        uiElements.hardBtn = createButton(startX, diffBtnY, diffBtnWidth, diffBtnHeight, 'Khó', gameSettings.difficulty === 'hard' ? '#FFC107' : '#607D8B', () => { gameSettings.difficulty = 'hard'; saveGameSettings(); setupUIForState('mainMenu'); });
+        uiElements.hardBtn = createButton(startX, diffBtnY, diffBtnWidth, diffBtnHeight, 'Khó', gameSettings.difficulty === 'hard' ? '#FFC107' : '#607D8B', () => { gameSettings.difficulty = 'hard'; loadDifficultyParameters(); saveGameSettings(); setupUIForState('mainMenu'); });
 
-        // Nút Chọn Skin (Ví dụ đơn giản)
-        uiElements.skinButton = createButton(cx, cy + 150 * scaleFactor, 200 * scaleFactor, 50 * scaleFactor, 'Skins (TBD)', '#03A9F4', () => {
-             console.log("Màn hình chọn Skin/Đạn chưa làm!");
-             // Chuyển sang gameState 'skinSelection' nếu có
-        });
-         // Thêm các nút chọn đạn, nhiệm vụ tương tự...
+        // Thêm các nút khác (skins, options...) nếu muốn
+        uiElements.skinButton = createButton(cx, cy + 150 * scaleFactor, 200 * scaleFactor, 50 * scaleFactor, 'Skins (TBD)', '#03A9F4', () => { console.log("Skin selection TBD"); });
 
     } else if (state === 'gameOver') {
          uiElements.title = { type: 'text', x: cx, y: cy - 80 * scaleFactor, text: 'GAME OVER', font: `bold ${70 * scaleFactor}px Arial`, color: '#FF0000', align: 'center' };
          uiElements.finalScore = { type: 'text', x: cx, y: cy, text: `Score: ${score}`, font: `${30 * scaleFactor}px Arial`, color: '#FFFFFF', align: 'center' };
          uiElements.highScore = { type: 'text', x: cx, y: cy + 40 * scaleFactor, text: `High Score: ${highScore}`, font: `${24 * scaleFactor}px Arial`, color: '#FFFF00', align: 'center' };
-         uiElements.restartButton = createButton(cx, cy + 100 * scaleFactor, 250 * scaleFactor, 60 * scaleFactor, 'Chơi Lại', '#4CAF50', () => { gameState = 'mainMenu'; setupUIForState('mainMenu'); }); // Quay lại Menu
+         uiElements.restartButton = createButton(cx, cy + 100 * scaleFactor, 250 * scaleFactor, 60 * scaleFactor, 'Menu Chính', '#4CAF50', () => { gameState = 'mainMenu'; setupUIForState('mainMenu'); });
 
-    } else if (state === 'playing') {
-         // UI trong game (Score) - vẽ trực tiếp trong drawUI
+    } else if (state === 'win') { // Thêm màn hình Win
+         uiElements.title = { type: 'text', x: cx, y: cy - 80 * scaleFactor, text: 'YOU WIN!', font: `bold ${70 * scaleFactor}px Arial`, color: '#00FF00', align: 'center' };
+         uiElements.finalScore = { type: 'text', x: cx, y: cy, text: `Score: ${score}`, font: `${30 * scaleFactor}px Arial`, color: '#FFFFFF', align: 'center' };
+         uiElements.highScore = { type: 'text', x: cx, y: cy + 40 * scaleFactor, text: `High Score: ${highScore}`, font: `${24 * scaleFactor}px Arial`, color: '#FFFF00', align: 'center' };
+         uiElements.restartButton = createButton(cx, cy + 100 * scaleFactor, 250 * scaleFactor, 60 * scaleFactor, 'Menu Chính', '#4CAF50', () => { gameState = 'mainMenu'; setupUIForState('mainMenu'); });
     }
-    // Thêm các state khác: 'win', 'paused', 'skinSelection'...
 }
 
 function createButton(x, y, width, height, text, color, onClick) {
-    return {
-        type: 'button',
-        rect: { x: x - width / 2, y: y - height / 2, width: width, height: height }, // Lưu rect để dễ kiểm tra click
-        text: text,
-        color: color,
-        hoverColor: lightenColor(color, 20), // Màu sáng hơn khi hover
-        textColor: '#FFFFFF',
-        font: `bold ${height * 0.4}px Arial`, // Font size dựa vào chiều cao nút
-        onClick: onClick,
-        isHovering: false // Trạng thái hover
-    };
+    return { type: 'button', rect: { x: x - width / 2, y: y - height / 2, width: width, height: height }, text: text, color: color, hoverColor: lightenColor(color, 20), textColor: '#FFFFFF', font: `bold ${height * 0.4}px Arial`, onClick: onClick, isHovering: false };
 }
 
 function drawUI() {
+    // Vẽ background mờ cho các màn hình không phải playing
+    if (gameState !== 'playing') {
+         ctx.fillStyle = 'rgba(0, 0, 0, 0.6)'; // Nền mờ
+         ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
     for (const key in uiElements) {
         const el = uiElements[key];
+        ctx.save(); // Lưu trạng thái vẽ
         if (el.type === 'text') {
             ctx.fillStyle = el.color;
             ctx.font = el.font;
             ctx.textAlign = el.align || 'left';
+            ctx.textBaseline = 'middle'; // Căn giữa theo chiều dọc tốt hơn
             ctx.fillText(el.text, el.x, el.y);
         } else if (el.type === 'button') {
-            // Vẽ nút
-            ctx.fillStyle = el.isHovering ? el.hoverColor : el.color; // Đổi màu nếu hover
-            ctx.fillRect(el.rect.x, el.rect.y, el.rect.width, el.rect.height);
-            // Vẽ chữ trên nút
+            ctx.fillStyle = el.isHovering ? el.hoverColor : el.color;
+            // Vẽ hình chữ nhật bo góc (trông đẹp hơn)
+            fillRoundRect(ctx, el.rect.x, el.rect.y, el.rect.width, el.rect.height, 10 * scaleFactor); // Bo góc
+            // ctx.fillRect(el.rect.x, el.rect.y, el.rect.width, el.rect.height); // Hình chữ nhật thường
+
             ctx.fillStyle = el.textColor;
             ctx.font = el.font;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(el.text, el.rect.x + el.rect.width / 2, el.rect.y + el.rect.height / 2);
         }
+        ctx.restore(); // Khôi phục trạng thái vẽ
     }
 
-    // Vẽ UI trong game (Score, Lives...)
+    // Vẽ UI trong game
     if (gameState === 'playing') {
+        ctx.save();
         ctx.fillStyle = 'white';
         ctx.font = `${20 * scaleFactor}px Arial`;
         ctx.textAlign = 'left';
         ctx.textBaseline = 'top';
         ctx.fillText(`Score: ${score}`, 10 * scaleFactor, 10 * scaleFactor);
-        // Vẽ thêm mạng sống, loại đạn hiện tại...
+        // Ví dụ vẽ High Score ở góc trên bên phải
+        ctx.textAlign = 'right';
+        ctx.fillText(`Hi: ${highScore}`, canvas.width - 10 * scaleFactor, 10 * scaleFactor);
+        ctx.restore();
     }
 }
+
+// Helper vẽ hình chữ nhật bo góc
+function fillRoundRect(ctx, x, y, width, height, radius) {
+  if (width < 2 * radius) radius = width / 2;
+  if (height < 2 * radius) radius = height / 2;
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.arcTo(x + width, y,   x + width, y + height, radius);
+  ctx.arcTo(x + width, y + height, x, y + height, radius);
+  ctx.arcTo(x, y + height, x, y, radius);
+  ctx.arcTo(x, y, x + width, y, radius);
+  ctx.closePath();
+  ctx.fill();
+}
+
 
 // --- Game Object Classes ---
 class Player {
     constructor() {
-        this.skin = assets[gameSettings.selectedPlayerSkin] || assets.player_default;
-        this.width = (this.skin.img.width || 40) * scaleFactor * 0.8; // Scale và giảm nhẹ size
-        this.height = (this.skin.img.height || 30) * scaleFactor * 0.8;
+        // Chọn skin dựa trên setting, fallback về default
+        this.skinKey = gameSettings.unlockedSkins.player.includes(gameSettings.selectedPlayerSkin) ? gameSettings.selectedPlayerSkin : 'player_default';
+        this.skin = assets[this.skinKey];
+
+        this.width = (this.skin.img.naturalWidth || 40) * scaleFactor * 0.8; // Dùng naturalWidth an toàn hơn
+        this.height = (this.skin.img.naturalHeight || 30) * scaleFactor * 0.8;
         this.x = canvas.width / 2 - this.width / 2;
         this.y = canvas.height - this.height - 30 * scaleFactor;
         this.speed = params.PLAYER_SPEED;
         this.shootTimer = 0;
         this.shootCooldown = params.PLAYER_SHOOT_COOLDOWN;
-        this.bulletSkinKey = gameSettings.selectedBulletSkin; // Lưu key skin đạn
+        this.bulletSkinKey = gameSettings.unlockedSkins.bullet.includes(gameSettings.selectedBulletSkin) ? gameSettings.selectedBulletSkin : 'bullet_default';
         this.alive = true;
     }
-
-    draw() {
-        if (!this.alive) return;
-        ctx.drawImage(this.skin.img, this.x, this.y, this.width, this.height);
-    }
-
+    draw() { if (this.alive) ctx.drawImage(this.skin.img, this.x, this.y, this.width, this.height); }
     update() {
         if (!this.alive) return;
-        // Movement
         if (keys['ArrowLeft'] || keys['KeyA']) this.move(-1);
         if (keys['ArrowRight'] || keys['KeyD']) this.move(1);
-
-        // Shooting Cooldown
         if (this.shootTimer > 0) this.shootTimer--;
-
-        // Shooting (Triggered by Space in input handler)
     }
-
     move(direction) {
         this.x += direction * this.speed;
-        if (this.x < 0) this.x = 0;
-        if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+        this.x = Math.max(0, Math.min(this.x, canvas.width - this.width)); // Clamp position
     }
-
     shoot() {
         if (this.shootTimer <= 0 && this.alive) {
             const bulletAsset = assets[this.bulletSkinKey] || assets.bullet_default;
-            const bulletWidth = (bulletAsset.img.width || 5) * scaleFactor;
-            const bulletHeight = (bulletAsset.img.height || 10) * scaleFactor;
+            const bulletWidth = (bulletAsset.img.naturalWidth || 5) * scaleFactor;
+            const bulletHeight = (bulletAsset.img.naturalHeight || 10) * scaleFactor;
             const bulletX = this.x + this.width / 2 - bulletWidth / 2;
             const bulletY = this.y;
-            playerBullets.push(new Bullet(bulletX, bulletY, bulletWidth, bulletHeight, this.bulletSkinKey, -1)); // -1: up
-            this.shootTimer = this.shootCooldown; // Reset cooldown
-            // Play sound
+            playerBullets.push(new Bullet(bulletX, bulletY, bulletWidth, bulletHeight, this.bulletSkinKey, -1));
+            this.shootTimer = this.shootCooldown;
         }
     }
-
     die() {
+        if (!this.alive) return; // Tránh die nhiều lần
         this.alive = false;
         createExplosion(this.x + this.width / 2, this.y + this.height / 2);
+        saveHighScore(); // Lưu điểm trước khi chuyển state
         gameState = 'gameOver';
-        saveHighScore();
         setupUIForState('gameOver');
-        // Play sound
     }
 }
 
 class Invader {
-     constructor(x, y, type = 'basic') { // Thêm type để có nhiều loại
+     constructor(x, y, type = 'basic') {
         this.type = type;
-        this.skin = assets[`invader_${type}`] || assets.invader_basic;
-        this.width = (this.skin.img.width || 30) * scaleFactor * 0.9;
-        this.height = (this.skin.img.height || 25) * scaleFactor * 0.9;
+        this.skinKey = `invader_${type}`; // Key dựa trên type
+        this.skin = assets[this.skinKey] || assets.invader_basic; // Fallback
+        this.width = (this.skin.img.naturalWidth || 30) * scaleFactor * 0.9;
+        this.height = (this.skin.img.naturalHeight || 25) * scaleFactor * 0.9;
         this.x = x;
         this.y = y;
         this.alive = true;
-        // Thêm máu, điểm khác nhau tùy type
-        this.points = (type === 'strong') ? 50 : 10;
+        this.points = (type === 'strong') ? 50 : 10; // Ví dụ điểm
     }
-
-    draw() {
-       if (!this.alive) return;
-       ctx.drawImage(this.skin.img, this.x, this.y, this.width, this.height);
-    }
-
-     update(dx, dy) { // Nhận giá trị di chuyển từ bên ngoài
-         if (!this.alive) return;
-         this.x += dx;
-         this.y += dy;
-     }
-
+    draw() { if (this.alive) ctx.drawImage(this.skin.img, this.x, this.y, this.width, this.height); }
+    update(dx, dy) { if (this.alive) { this.x += dx; this.y += dy; } }
     shoot() {
         if (this.alive && Math.random() < params.INVADER_FIRE_PROBABILITY) {
-             // Kẻ địch có thể dùng skin đạn riêng hoặc chung
-            const bulletSkinKey = 'bullet_default'; // Hoặc 'bullet_invader'
+            const bulletSkinKey = 'bullet_default'; // Hoặc đạn riêng của invader
             const bulletAsset = assets[bulletSkinKey];
-             const bulletWidth = (bulletAsset.img.width || 5) * scaleFactor;
-            const bulletHeight = (bulletAsset.img.height || 10) * scaleFactor;
+            const bulletWidth = (bulletAsset.img.naturalWidth || 5) * scaleFactor;
+            const bulletHeight = (bulletAsset.img.naturalHeight || 10) * scaleFactor;
             const bulletX = this.x + this.width / 2 - bulletWidth / 2;
             const bulletY = this.y + this.height;
-            invaderBullets.push(new Bullet(bulletX, bulletY, bulletWidth, bulletHeight, bulletSkinKey, 1)); // 1: down
+            invaderBullets.push(new Bullet(bulletX, bulletY, bulletWidth, bulletHeight, bulletSkinKey, 1));
         }
     }
-
      die() {
          if (!this.alive) return;
          this.alive = false;
          score += this.points;
          createExplosion(this.x + this.width / 2, this.y + this.height / 2);
-         // Play sound
      }
 }
 
 class Bullet {
     constructor(x, y, width, height, skinKey, direction) {
-        this.skin = assets[skinKey] || assets.bullet_default;
-        this.x = x;
-        this.y = y;
-        this.width = width;
-        this.height = height;
-        this.direction = direction; // -1 up, 1 down
+        this.skinKey = skinKey;
+        this.skin = assets[this.skinKey] || assets.bullet_default; // Fallback
+        this.x = x; this.y = y; this.width = width; this.height = height;
+        this.direction = direction;
         this.speed = (direction === -1 ? params.BULLET_SPEED : params.INVADER_BULLET_SPEED);
         this.active = true;
-         // Thêm thuộc tính đạn khác: damage, piercing,...
     }
-
-    draw() {
-         if (!this.active) return;
-         ctx.drawImage(this.skin.img, this.x, this.y, this.width, this.height);
-    }
-
+    draw() { if (this.active) ctx.drawImage(this.skin.img, this.x, this.y, this.width, this.height); }
     update() {
         if (!this.active) return;
         this.y += this.direction * this.speed;
-        // Check bounds
-        if (this.y + this.height < 0 || this.y > canvas.height) {
-            this.active = false;
-        }
+        if (this.y + this.height < 0 || this.y > canvas.height) { this.active = false; }
     }
 }
 
 class Explosion {
     constructor(x, y) {
         this.asset = assets.explosion;
-        this.width = this.asset.frameWidth * scaleFactor * 1.5; // Nổ to hơn chút
-        this.height = this.asset.frameWidth * scaleFactor * 1.5;
+        // Đảm bảo asset tồn tại và có frameWidth
+        if (!this.asset || !this.asset.frameWidth) {
+            this.active = false;
+            console.error("Explosion asset or frameWidth missing!");
+            return;
+        }
+        this.frameWidth = this.asset.frameWidth;
+        this.width = this.frameWidth * scaleFactor * 1.5;
+        this.height = this.frameWidth * scaleFactor * 1.5; // Giả sử frame vuông
         this.x = x - this.width / 2;
         this.y = y - this.height / 2;
-        this.totalFrames = this.asset.frames;
+        this.totalFrames = this.asset.frames || 1; // Fallback 1 frame
         this.currentFrame = 0;
         this.frameTimer = 0;
-        this.frameDuration = 4; // Số frame game loop cho mỗi frame ảnh nổ
+        this.frameDuration = 4;
         this.active = true;
     }
-
     draw() {
         if (!this.active || !this.asset.img.complete) return;
-        ctx.drawImage(
-            this.asset.img,
-            this.currentFrame * this.asset.frameWidth, // Source X
-            0, // Source Y
-            this.asset.frameWidth, // Source Width
-            this.asset.frameWidth, // Source Height (giả sử vuông)
-            this.x, this.y, // Dest X, Y
-            this.width, this.height // Dest Width, Height
-        );
+        try {
+            ctx.drawImage(
+                this.asset.img,
+                this.currentFrame * this.frameWidth, 0, this.frameWidth, this.frameWidth,
+                this.x, this.y, this.width, this.height
+            );
+        } catch (e) {
+            console.error("Error drawing explosion:", e, this);
+            this.active = false; // Vô hiệu hóa nếu lỗi vẽ
+        }
     }
-
     update() {
         if (!this.active) return;
         this.frameTimer++;
         if (this.frameTimer >= this.frameDuration) {
             this.currentFrame++;
             this.frameTimer = 0;
-            if (this.currentFrame >= this.totalFrames) {
-                this.active = false; // Animation kết thúc
-            }
+            if (this.currentFrame >= this.totalFrames) { this.active = false; }
         }
     }
 }
-
-function createExplosion(x, y) {
-    explosions.push(new Explosion(x, y));
-}
+function createExplosion(x, y) { explosions.push(new Explosion(x, y)); }
 
 // --- Game Initialization & State Management ---
-let invaderGrid = {
-    x: 0,
-    y: 0,
-    width: 0,
-    height: 0,
-    direction: 1,
-    speedX: 0,
-    needsDrop: false
-};
+let invaderGrid = { x: 0, y: 0, width: 0, height: 0, direction: 1, speedX: 0, needsDrop: false };
 
 function initializeGame() {
-    // Reset core variables
-    score = 0;
-    gameFrame = 0;
-    playerBullets = [];
-    invaderBullets = [];
-    explosions = [];
-    invaders = [];
-
-    // Load difficulty parameters for the current setting
+    score = 0; gameFrame = 0; playerBullets = []; invaderBullets = []; explosions = []; invaders = [];
     loadDifficultyParameters();
-
-    // Create Player
     player = new Player();
 
-    // Create Invaders and calculate grid bounds
-    const invaderAsset = assets.invader_basic; // Hoặc chọn type ngẫu nhiên
-    const invaderWidth = (invaderAsset.img.width || 30) * scaleFactor * 0.9;
-    const invaderHeight = (invaderAsset.img.height || 25) * scaleFactor * 0.9;
-    const spacingX = 40 * scaleFactor;
-    const spacingY = 30 * scaleFactor;
-    const rows = 4;
-    const cols = 8;
+    const invaderAsset = assets.invader_basic; // Hoặc type khác
+    const invaderWidth = (invaderAsset.img.naturalWidth || 30) * scaleFactor * 0.9;
+    const invaderHeight = (invaderAsset.img.naturalHeight || 25) * scaleFactor * 0.9;
+    const spacingX = 40 * scaleFactor; const spacingY = 30 * scaleFactor;
+    const rows = 4; const cols = 8;
     const totalGridWidth = cols * invaderWidth + (cols - 1) * spacingX;
     const startX = (canvas.width - totalGridWidth) / 2;
     const startY = 60 * scaleFactor;
 
-    invaderGrid.x = startX;
-    invaderGrid.y = startY;
-    invaderGrid.width = totalGridWidth;
-    invaderGrid.height = rows * invaderHeight + (rows - 1) * spacingY; // Ước tính chiều cao
-    invaderGrid.direction = 1;
-    invaderGrid.speedX = params.INVADER_SPEED_X;
-    invaderGrid.needsDrop = false;
+    invaderGrid = { x: startX, y: startY, width: totalGridWidth, height: rows * invaderHeight + (rows - 1) * spacingY, direction: 1, speedX: params.INVADER_SPEED_X, needsDrop: false };
 
-    for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-            const invaderX = startX + col * (invaderWidth + spacingX);
-            const invaderY = startY + row * (invaderHeight + spacingY);
-            invaders.push(new Invader(invaderX, invaderY)); // Thêm type nếu cần
-        }
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+        invaders.push(new Invader(startX + c * (invaderWidth + spacingX), startY + r * (invaderHeight + spacingY)));
     }
-
-    // Setup UI for playing state
-    setupUIForState('playing');
+    setupUIForState('playing'); // UI cho màn hình chơi
 }
 
 // --- Update Functions ---
 function updateGameObjects() {
-    player.update();
+    if(player) player.update();
 
-    // Update bullets and remove inactive ones
-    playerBullets = playerBullets.filter(b => b.active);
-    playerBullets.forEach(b => b.update());
-    invaderBullets = invaderBullets.filter(b => b.active);
-    invaderBullets.forEach(b => b.update());
+    playerBullets = playerBullets.filter(b => b.active); playerBullets.forEach(b => b.update());
+    invaderBullets = invaderBullets.filter(b => b.active); invaderBullets.forEach(b => b.update());
+    explosions = explosions.filter(e => e.active); explosions.forEach(e => e.update());
 
-    // Update explosions and remove inactive ones
-    explosions = explosions.filter(e => e.active);
-    explosions.forEach(e => e.update());
-
-    // Update Invaders (Movement logic is now grid-based)
     updateInvaderGridMovement();
-    invaders.forEach(invader => invader.shoot()); // Invaders bắn độc lập
+    invaders.forEach(invader => invader.shoot());
 }
 
 function updateInvaderGridMovement() {
-    if (invaders.length === 0) return; // Không còn gì để di chuyển
+    const aliveInvaders = invaders.filter(i => i.alive);
+    if (aliveInvaders.length === 0) return;
 
-    let currentGridLeft = Infinity;
-    let currentGridRight = -Infinity;
-    let currentGridBottom = -Infinity;
-    let activeInvaderExists = false;
+    let currentGridLeft = Math.min(...aliveInvaders.map(i => i.x));
+    let currentGridRight = Math.max(...aliveInvaders.map(i => i.x + i.width));
+    let currentGridBottom = Math.max(...aliveInvaders.map(i => i.y + i.height));
 
-    invaders.forEach(invader => {
-        if (invader.alive) {
-            activeInvaderExists = true;
-            currentGridLeft = Math.min(currentGridLeft, invader.x);
-            currentGridRight = Math.max(currentGridRight, invader.x + invader.width);
-             currentGridBottom = Math.max(currentGridBottom, invader.y + invader.height);
-        }
-    });
-
-     if (!activeInvaderExists) return; // Không còn invader nào sống
-
-     invaderGrid.needsDrop = false; // Reset trạng thái drop
-
-    // Kiểm tra chạm biên ngang
-     if (invaderGrid.direction === 1 && currentGridRight + invaderGrid.speedX > canvas.width) {
-        invaderGrid.direction = -1;
-        invaderGrid.needsDrop = true;
-    } else if (invaderGrid.direction === -1 && currentGridLeft + invaderGrid.speedX * invaderGrid.direction < 0) {
-        invaderGrid.direction = 1;
-        invaderGrid.needsDrop = true;
+    invaderGrid.needsDrop = false;
+    if (invaderGrid.direction === 1 && currentGridRight + invaderGrid.speedX > canvas.width) {
+        invaderGrid.direction = -1; invaderGrid.needsDrop = true;
+    } else if (invaderGrid.direction === -1 && currentGridLeft - invaderGrid.speedX < 0) {
+        invaderGrid.direction = 1; invaderGrid.needsDrop = true;
     }
 
-    // Tính toán delta X, Y cho mỗi invader
     let dx = invaderGrid.needsDrop ? 0 : invaderGrid.speedX * invaderGrid.direction;
     let dy = invaderGrid.needsDrop ? params.INVADER_DROP_Y : 0;
 
-    // Áp dụng di chuyển
-    invaders.forEach(invader => {
-         if (invader.alive) {
-             invader.update(dx, dy);
-         }
-    });
+    invaders.forEach(invader => invader.update(dx, dy));
 
-     // Kiểm tra nếu quân xâm lược chạm người chơi sau khi di chuyển
-     if (currentGridBottom + dy >= player.y && player.alive) {
+     // Kiểm tra chạm người chơi SAU KHI di chuyển xong frame này
+     currentGridBottom += dy; // Cập nhật bottom sau khi rơi
+     if (player && player.alive && currentGridBottom >= player.y) {
          player.die();
      }
 }
 
 // --- Collision Detection ---
 function checkCollisions() {
-    if (!player.alive) return; // Không cần kiểm tra nếu player đã chết
+    if (!player || !player.alive) return;
 
-    // Player bullets vs Invaders
     playerBullets.forEach(bullet => {
         if (!bullet.active) return;
         invaders.forEach(invader => {
             if (invader.alive && isColliding(bullet, invader)) {
-                invader.die(); // Xử lý chết, cộng điểm, tạo nổ bên trong die()
-                bullet.active = false; // Đạn biến mất
-                // Thêm logic thưởng nếu cần (ví dụ: đếm combo)
-                // Break không cần thiết vì 1 đạn có thể trúng nhiều (nếu là piercing)
+                invader.die(); bullet.active = false;
             }
         });
     });
 
-    // Invader bullets vs Player
     invaderBullets.forEach(bullet => {
         if (bullet.active && isColliding(bullet, player)) {
-            bullet.active = false;
-            player.die(); // Xử lý người chơi chết
+            bullet.active = false; player.die();
         }
     });
 
-     // (Optional) Player vs Invader (nếu muốn va chạm trực tiếp)
     invaders.forEach(invader => {
         if (invader.alive && isColliding(player, invader)) {
-            invader.die(); // Kẻ địch cũng chết
-            player.die();
+            invader.die(); player.die();
         }
     });
 }
 
-// AABB Collision Check
-function isColliding(rect1, rect2) {
-     // Kiểm tra xem đối tượng có active/alive không trước khi gọi hàm này
-    return (
-        rect1.x < rect2.x + rect2.width &&
-        rect1.x + rect1.width > rect2.x &&
-        rect1.y < rect2.y + rect2.height &&
-        rect1.y + rect1.height > rect2.y
-    );
-}
+function isColliding(r1, r2) { return r1.x < r2.x + r2.width && r1.x + r1.width > r2.x && r1.y < r2.y + r2.height && r1.y + r1.height > r2.y; }
 
 // --- Win Condition ---
 function checkWinCondition() {
-    // Thắng khi không còn invader nào sống
-    if (invaders.every(invader => !invader.alive)) {
-         if (gameState === 'playing') { // Chỉ chuyển state nếu đang chơi
-            console.log("Player Wins!");
-            gameState = 'win'; // Cần tạo màn hình 'win' tương tự 'gameOver'
-            saveHighScore();
-            setupUIForState('win'); // Thiết lập UI cho màn hình thắng
-         }
+    if (gameState === 'playing' && invaders.every(invader => !invader.alive)) {
+        console.log("Player Wins!");
+        gameState = 'win';
+        saveHighScore();
+        setupUIForState('win');
     }
 }
 
-
 // --- Draw Functions ---
 function drawGame() {
-    // 1. Vẽ nền
-    if (assets.background.img.complete) {
+    // Nền
+    if (assets.background.img.complete && assets.background.img.naturalWidth > 0) {
         ctx.drawImage(assets.background.img, 0, 0, canvas.width, canvas.height);
-    } else {
-        ctx.fillStyle = '#000010'; // Nền đen xanh đậm
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
+    } else { ctx.fillStyle = '#000010'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
 
-    // 2. Vẽ đối tượng game
-    if(player) player.draw(); // Check if player exists
+    // Đối tượng game
+    if(player) player.draw();
     invaders.forEach(i => i.draw());
     playerBullets.forEach(b => b.draw());
     invaderBullets.forEach(b => b.draw());
     explosions.forEach(e => e.draw());
 
-    // 3. Vẽ UI trong game (Score, Lives, etc.)
-    drawUI(); // drawUI sẽ tự kiểm tra gameState để vẽ đúng
+    // UI (Vẽ sau cùng để đè lên trên)
+    drawUI();
 }
 
 // --- Input Handling ---
 function handleInput(event) {
     let inputX, inputY, inputType;
+    let isPrimaryAction = false; // Đánh dấu nếu là click/touch bắt đầu
 
     if (event.type.startsWith('touch')) {
-        event.preventDefault(); // Ngăn hành vi mặc định (scroll, zoom)
-        const touch = event.changedTouches[0]; // Lấy touch đầu tiên
+        event.preventDefault();
+        const touch = event.changedTouches[0];
         const rect = canvas.getBoundingClientRect();
         inputX = touch.clientX - rect.left;
         inputY = touch.clientY - rect.top;
-        inputType = event.type; // 'touchstart', 'touchmove', 'touchend'
-
-         if (inputType === 'touchstart') {
-            touchPos = { x: inputX, y: inputY };
-            touchHandled = false; // Đánh dấu có touch mới chưa xử lý
-        } else if (inputType === 'touchend') {
-            touchPos = null; // Xóa vị trí touch khi nhấc ngón tay
-        }
-
+        inputType = event.type;
+        if (inputType === 'touchstart') { touchPos = { x: inputX, y: inputY }; touchHandled = false; isPrimaryAction = true; }
+        else if (inputType === 'touchend') { touchPos = null; }
     } else if (event.type.startsWith('mouse')) {
         const rect = canvas.getBoundingClientRect();
         inputX = event.clientX - rect.left;
         inputY = event.clientY - rect.top;
-        inputType = event.type; // 'mousedown', 'mouseup', 'mousemove'
+        inputType = event.type;
 
-        // Cập nhật trạng thái hover cho nút
-         if (gameState === 'mainMenu' || gameState === 'gameOver') { // Chỉ xử lý hover ở menu/gameover
-            for (const key in uiElements) {
-                if (uiElements[key].type === 'button') {
-                    uiElements[key].isHovering = isClickInsideRect(inputX, inputY, uiElements[key].rect);
-                }
-            }
-         }
-
-         if (inputType === 'mousedown') {
-            touchPos = { x: inputX, y: inputY }; // Giả lập touch khi click chuột
-            touchHandled = false;
-        } else if (inputType === 'mouseup') {
-            touchPos = null;
-        }
-
-    } else if (event.type.startsWith('key')) {
-        // Xử lý keydown/keyup đã có listener riêng
-        // Xử lý bắn bằng Space
-         if (event.type === 'keydown' && event.code === 'Space' && player && player.alive && gameState === 'playing') {
-             player.shoot();
-         }
-          // Xử lý nhấn Enter/Space ở các màn hình khác để bắt đầu/chơi lại
-          else if (event.type === 'keydown' && (event.code === 'Space' || event.code === 'Enter')) {
-             if (gameState === 'mainMenu') {
-                 // Tìm nút Play và kích hoạt (hoặc bắt đầu trực tiếp)
-                 if (uiElements.playButton) uiElements.playButton.onClick();
-             } else if (gameState === 'gameOver' || gameState === 'win') {
-                 // Tìm nút Chơi Lại và kích hoạt
-                  if (uiElements.restartButton) uiElements.restartButton.onClick();
+        // Cập nhật hover
+        let isHoveringAnyButton = false;
+        if (gameState === 'mainMenu' || gameState === 'gameOver' || gameState === 'win') {
+             for (const key in uiElements) {
+                 if (uiElements[key].type === 'button') {
+                    const hovering = isClickInsideRect(inputX, inputY, uiElements[key].rect);
+                    if(uiElements[key].isHovering !== hovering) { // Chỉ cập nhật nếu trạng thái hover thay đổi
+                         uiElements[key].isHovering = hovering;
+                    }
+                    if(hovering) isHoveringAnyButton = true;
+                 }
              }
-         }
-        return; // Không cần xử lý thêm cho phím ở đây
+        }
+         // Đặt lại cursor
+        canvas.style.cursor = isHoveringAnyButton ? 'pointer' : 'crosshair';
+
+
+        if (inputType === 'mousedown') { touchPos = { x: inputX, y: inputY }; touchHandled = false; isPrimaryAction = true; }
+        else if (inputType === 'mouseup') { touchPos = null; }
+    } else if (event.type.startsWith('key')) {
+        if (event.type === 'keydown') {
+            keys[event.code] = true;
+            if (event.code === 'Space') {
+                event.preventDefault(); // Ngăn Space cuộn trang
+                if (player && player.alive && gameState === 'playing') { player.shoot(); }
+                 else if (gameState === 'mainMenu' || gameState === 'gameOver' || gameState === 'win') {
+                     // Tìm nút mặc định để kích hoạt (ví dụ: Play hoặc Restart)
+                      const defaultButtonKey = gameState === 'mainMenu' ? 'playButton' : 'restartButton';
+                      if (uiElements[defaultButtonKey] && uiElements[defaultButtonKey].onClick) {
+                         uiElements[defaultButtonKey].onClick();
+                         isPrimaryAction = true; // Coi như là hành động chính
+                      }
+                 }
+            }
+             // Có thể thêm Enter như Space
+             else if (event.code === 'Enter') {
+                  if (gameState === 'mainMenu' || gameState === 'gameOver' || gameState === 'win') {
+                      const defaultButtonKey = gameState === 'mainMenu' ? 'playButton' : 'restartButton';
+                      if (uiElements[defaultButtonKey] && uiElements[defaultButtonKey].onClick) {
+                         uiElements[defaultButtonKey].onClick();
+                         isPrimaryAction = true;
+                      }
+                 }
+             }
+        } else if (event.type === 'keyup') {
+            keys[event.code] = false;
+        }
+        return; // Không cần xử lý thêm
     }
 
-     // --- Xử lý click/touch trên UI ---
-    if (!touchHandled && touchPos && (inputType === 'touchstart' || inputType === 'mousedown')) {
-        let uiClicked = false;
-         if (gameState === 'mainMenu' || gameState === 'gameOver') { // Chỉ xử lý click nút ở các màn hình này
+    // Xử lý click/touch trên UI chỉ khi bắt đầu chạm/click
+    if (isPrimaryAction && !touchHandled && touchPos) {
+        let uiClickedHandled = false;
+        if (gameState === 'mainMenu' || gameState === 'gameOver' || gameState === 'win') {
              for (const key in uiElements) {
                 const el = uiElements[key];
                 if (el.type === 'button' && isClickInsideRect(touchPos.x, touchPos.y, el.rect)) {
-                    console.log(`Button clicked: ${el.text}`);
-                    if (el.onClick) {
-                        el.onClick(); // Gọi hàm xử lý của nút
-                        uiClicked = true;
-                        break; // Chỉ xử lý 1 nút mỗi lần click
-                    }
+                    if (el.onClick) { el.onClick(); uiClickedHandled = true; break; }
                 }
             }
          }
-        touchHandled = true; // Đánh dấu đã xử lý touch/click này
+        touchHandled = true; // Đánh dấu đã xử lý, dù có click trúng nút hay không
     }
 }
-
-function isClickInsideRect(x, y, rect) {
-    return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height;
-}
-
-// --- Helper Functions ---
-function lightenColor(hex, percent) {
-    hex = hex.replace(/^\s*#|\s*$/g, '');
-    if (hex.length == 3) {
-        hex = hex.replace(/(.)/g, '$1$1');
-    }
-    var r = parseInt(hex.substr(0, 2), 16),
-        g = parseInt(hex.substr(2, 2), 16),
-        b = parseInt(hex.substr(4, 2), 16);
-
-    percent = Math.min(100, Math.max(-100, percent)); // Clamp percent
-
-    r = Math.round(Math.min(255, Math.max(0, r * (1 + percent / 100))));
-    g = Math.round(Math.min(255, Math.max(0, g * (1 + percent / 100))));
-    b = Math.round(Math.min(255, Math.max(0, b * (1 + percent / 100))));
-
-    return '#' + (r).toString(16).padStart(2, '0') +
-                 (g).toString(16).padStart(2, '0') +
-                 (b).toString(16).padStart(2, '0');
-}
-
+function isClickInsideRect(x, y, rect) { return x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height; }
 
 // --- Game Loop ---
 function gameLoop(timestamp) {
     gameFrame++;
 
-    // Xử lý logic dựa trên trạng thái
+    // Cập nhật trạng thái game
     switch (gameState) {
         case 'playing':
             updateGameObjects();
             checkCollisions();
-            checkWinCondition(); // Kiểm tra thắng/thua sau khi update và va chạm
+            checkWinCondition();
             break;
-        case 'mainMenu':
-        case 'gameOver':
-        case 'win':
-             // Chỉ xử lý input UI (đã xử lý qua event listener và handleInput)
-             // Có thể thêm animation cho background menu ở đây
-            break;
-        // Các trạng thái khác (paused, skinSelection...)
+        // Các trạng thái khác không cần update logic game phức tạp
     }
 
-    // Vẽ mọi thứ
-    ctx.clearRect(0, 0, canvas.width, canvas.height); // Xóa toàn bộ canvas trước khi vẽ lại
-    drawGame(); // Vẽ nền, đối tượng game, và UI
+    // Vẽ lại màn hình
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    drawGame(); // Hàm này sẽ vẽ nền, đối tượng và UI phù hợp với gameState
 
-    // Yêu cầu frame tiếp theo
+    // Lặp lại
     requestAnimationFrame(gameLoop);
 }
 
 // --- Initialization ---
-window.addEventListener('resize', resizeCanvas); // Lắng nghe thay đổi kích thước cửa sổ
+window.addEventListener('resize', resizeCanvas);
+window.addEventListener('load', () => {
+    // Gọi loadAssets sau khi trang đã tải xong hoàn toàn (bao gồm cả DOM)
+    // Điều này đảm bảo canvas đã sẵn sàng
+    loadAssets();
+    // Game loop sẽ bắt đầu bên trong loadAssets khi tải xong
+});
 
-// Setup input listeners
-window.addEventListener('keydown', (e) => { keys[e.code] = true; handleInput(e); });
-window.addEventListener('keyup', (e) => { keys[e.code] = false; handleInput(e); });
+// Setup input listeners (nên đặt sau khi DOM sẵn sàng, nhưng đặt ở đây cũng thường ổn)
+window.addEventListener('keydown', handleInput);
+window.addEventListener('keyup', handleInput);
 canvas.addEventListener('mousedown', handleInput);
 canvas.addEventListener('mouseup', handleInput);
-canvas.addEventListener('mousemove', handleInput); // Để xử lý hover
-canvas.addEventListener('touchstart', handleInput);
+canvas.addEventListener('mousemove', handleInput);
+canvas.addEventListener('touchstart', handleInput, { passive: false }); // passive: false để preventDefault hoạt động
 canvas.addEventListener('touchend', handleInput);
-canvas.addEventListener('touchcancel', handleInput); // Xử lý khi touch bị hủy
-
-
-// Start loading assets, game loop starts after loading finishes
-loadAssets();
+canvas.addEventListener('touchcancel', handleInput);
