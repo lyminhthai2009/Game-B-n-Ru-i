@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <!-- Meta tags quan trọng cho responsive và mobile -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+
+    <title>Space Invaders Enhanced</title>
+
+    <!-- Liên kết đến file CSS -->
+    <link rel="stylesheet" href="style.css">
+
+    <style>
+        /* CSS quan trọng để đảm bảo layout hoạt động ngay lập tức */
+        /* Ngăn chặn hành vi chọn văn bản trên mobile khi chạm nhanh */
+        * {
+            -webkit-user-select: none; /* Safari */
+            -moz-user-select: none; /* Firefox */
+            -ms-user-select: none; /* IE10+ */
+            user-select: none;
+            /* Ngăn highlight màu xanh khi chạm trên mobile */
+            -webkit-tap-highlight-color: rgba(0,0,0,0);
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden; /* Ngăn scroll bar */
+            background-color: #000; /* Màu nền đen tổng thể */
+            display: flex; /* Dùng flexbox để căn giữa */
+            justify-content: center;
+            align-items: center;
+        }
+        canvas {
+            display: block; /* Loại bỏ khoảng trống thừa dưới canvas */
+            /* Kích thước sẽ được đặt bởi JavaScript */
+            /* Màu nền fallback nếu ảnh nền không tải được */
+            background-color: #000010;
+            /* Tùy chọn: thêm viền để debug */
+            /* border: 1px solid white; */
+        }
+    </style>
+</head>
+<body>
+    <!-- Phần tử Canvas nơi game sẽ được vẽ -->
+    <canvas id="gameCanvas">Trình duyệt của bạn không hỗ trợ Canvas.</canvas>
+
+    <!-- Liên kết đến file JavaScript (LƯU Ý: Đặt cuối cùng hoặc dùng defer) -->
+    <!-- defer đảm bảo HTML được phân tích xong trước khi chạy script -->
+    <script src="script.js" defer></script>
+</body>
+</html>
